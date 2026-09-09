@@ -51,15 +51,27 @@ python run_mujoco_rollout.py --sample /tmp/cosmos_sample
 
 ![Cosmos rollout vs. mujoco ground truth](qa/mujoco_rollout_comparison.png)
 
-Top row: real mujoco frames. Bottom row: Cosmos3-Edge's prediction from the first
-frame + our converted actions alone. The gripper's descent and the wrist/base
-rotation track the real motion -- evidence the action conversion and domain choice
-are at least directionally correct. Two caveats worth being honest about (see the
-docstring in `cosmos_action.py`): translation is passed through in world-frame
-metres with no verification that Cosmos trained on that frame rather than an
-end-effector-relative one, and there's no ground-truth calibration available for
-`bridge_orig_lerobot`'s exact gripper-channel convention (unlike `umi`, it doesn't
-ship a reference example in this checkpoint).
+**Update -- this single result did not hold up under closer testing; see
+[`VALIDATION.md`](VALIDATION.md).** A stress-test matrix (stay-action control,
+sign-reversed actions, a real-image control, an inverse-dynamics calibration check)
+found that this first result was likely not a genuine action-conditioning effect --
+a no-op action produced statistically the same amount of predicted motion as the
+real grasp action. Two things are now well-evidenced instead:
+
+- Our raw action magnitudes (real SI units: metres, radians) are roughly **10-40x
+  too small** for what this checkpoint's action-projection weights respond to --
+  confirmed independently by both a forward energy-response sweep and by asking
+  Cosmos's own `inverse_dynamics` mode what action it infers from our real video.
+- Once scaled into a responsive range, the *visual style* of this dataset's
+  flat-shaded synthetic renders -- not the action encoding itself -- is the
+  remaining blocker: the same action-conversion code produces a strong, correctly-
+  scaling response when given the checkpoint's own real camera image, but a weak or
+  outright hallucinated one on our MuJoCo renders. Every one of Cosmos 3's
+  action-conditioned domains was trained on real camera footage.
+
+`VALIDATION.md` has the full evidence table and next-step options. Short version:
+Cosmos3-Edge is not, right now, a reliable frozen environment for this dataset's
+rendering style, and that's a visual-domain-gap problem more than an action-math one.
 
 ## This box vs. the DGX Spark demo
 
