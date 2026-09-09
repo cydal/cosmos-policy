@@ -6,15 +6,60 @@ pick-and-place data in [`../mujoco-env-dataset`](../mujoco-env-dataset).
 
 ## Plan
 
-1. **Environment + Cosmos 3** (this step) -- get Cosmos 3 running on this box and
-   prove it with a smoke test.
-2. **Action-space check** -- confirm `mujoco-env-dataset`'s 7-D
+1. **Environment + Cosmos 3** (done) -- get Cosmos 3 running on this box and prove
+   it with a smoke test.
+2. **Action-space check** (done) -- confirm `mujoco-env-dataset`'s 7-D
    `[dx, dy, dz, droll, dpitch, dyaw, gripper]` action matches what Cosmos 3's
    `CosmosActionCondition(mode="forward_dynamics", ...)` expects, or work out the
    mapping if not. Pass a real sample image + action sequence from the mujoco dataset
    through Cosmos and confirm the rollout is sane.
 3. **Policy training** -- ResNet18 (ImageNet-pretrained) CNN policy, Cosmos 3 frozen
    as the environment it's trained/evaluated against.
+
+## Step 2: aligning mujoco's actions with Cosmos's
+
+Cosmos 3's action-conditioned embodiments (`bridge_orig_lerobot`, `droid_lerobot`,
+`umi`, `fractal`, ...) all share one 10-D "unified action representation": 3-D
+translation + the 6-D continuous rotation representation of Zhou et al. 2019 (the
+rotation matrix's first two columns, flattened) + 1-D gripper. mujoco-env-dataset's
+7-D action was already designed Bridge-style -- translation in metres, gripper an
+absolute `[0, 1]` aperture -- so the only real gap is the rotation dimensions: 3-D
+Euler deltas need expanding into that 6-D form. `mujoco-env-dataset/synthbot/
+cosmos_action.py:to_cosmos10` does exactly that and nothing else.
+
+Picked `domain_name="bridge_orig_lerobot"` over the checkpoint's own shipped example
+domain (`"umi"`): it's the actual BridgeData/WidowX embodiment -- a tabletop
+parallel-jaw gripper, the same task shape as this dataset -- rather than an
+egocentric handheld-camera rig. Swapping `domain_name` is a one-line change, no
+re-download needed, since it just selects a different set of the transformer's
+already-loaded domain-aware action-projection weights.
+
+`mujoco-env-dataset/scripts/export_cosmos_sample.py` exports one 16-step action
+chunk (the descend -> grasp -> lift window of a generated episode, converted to
+Cosmos's 10-D form) plus its first frame and real ground-truth frames.
+`run_mujoco_rollout.py` here feeds that through `Cosmos3-Edge` and writes a
+side-by-side comparison:
+
+```bash
+cd ../mujoco-env-dataset
+.../python scripts/export_cosmos_sample.py --episode dataset/train/ep000000 --out /tmp/cosmos_sample
+
+cd ../cosmos-policy
+source env.sh
+python run_mujoco_rollout.py --sample /tmp/cosmos_sample
+```
+
+![Cosmos rollout vs. mujoco ground truth](qa/mujoco_rollout_comparison.png)
+
+Top row: real mujoco frames. Bottom row: Cosmos3-Edge's prediction from the first
+frame + our converted actions alone. The gripper's descent and the wrist/base
+rotation track the real motion -- evidence the action conversion and domain choice
+are at least directionally correct. Two caveats worth being honest about (see the
+docstring in `cosmos_action.py`): translation is passed through in world-frame
+metres with no verification that Cosmos trained on that frame rather than an
+end-effector-relative one, and there's no ground-truth calibration available for
+`bridge_orig_lerobot`'s exact gripper-channel convention (unlike `umi`, it doesn't
+ship a reference example in this checkpoint).
 
 ## This box vs. the DGX Spark demo
 
