@@ -126,19 +126,57 @@ breaks down at the action magnitudes needed to get a strong response. Worth keep
 (`--photoreal` is opt-in, zero cost when off) as a complement to, not a replacement
 for, fine-tuning -- see the separate fine-tuning feasibility scoping.
 
+## 7. Is it a model-size problem? Tried Cosmos3-Nano (16B, not distilled)
+
+Not to use for policy training (too big for the rollout-throughput the training
+loop needs -- see the fine-tuning scoping doc) but purely to check whether Cosmos3-
+Edge's small, distilled 4B is itself the reason our actions don't land, or whether
+a bigger, non-distilled checkpoint behaves the same way.
+
+**It barely fits on this GPU at all**, which is itself informative: loading takes
+30.6 GiB (vs. Edge's much smaller footprint), leaving only 13.3 GiB free. Our own
+`world.py` memory guard actually refuses Nano outright (its `NEEDS_GIB=46` estimate,
+carried over from a different, shared-memory box, is conservative but not
+groundless) -- bypassing it worked for the 10-D domains here, but Nano's own native
+29-D AgiBotWorld example left only ~6.5 GiB free after one rollout, i.e. Nano is
+right at this card's ceiling for real generation, not comfortably inside it.
+
+Same grasp-window test as Edge's (clean render, domain `bridge_orig_lerobot`):
+
+| scale | energy (stay_control: 0.731) | cube_disp (GT: (-2.67, -24.23)) |
+|---|---|---|
+| 1 | 0.649 | (2.86, -4.48) |
+| 18 | 0.885 | (1.78, 0.01) |
+
+Same character as Edge's numbers (VALIDATION.md §1/§4): energy barely above the
+stay-control floor, no clean directional signal. Visually, scale 18's prediction
+isn't a coherent grasp+lift *or* Edge's phantom-object hallucination -- it's a
+third failure mode, the gripper's base detaching and floating up out of frame
+entirely (`qa/nano_bridge_scale18_detach.png`).
+
+**Conclusion: size is not the fix.** A 4x bigger, non-distilled checkpoint shows
+the same weak/incoherent response to our converted actions on this rendering style.
+This corroborates rather than contradicts section 5's diagnosis -- the visual
+domain gap is a property of what these models were trained on (real camera
+footage, across the board), not of how big any single checkpoint is. It also means
+there's no shortcut available by "just use the bigger model": fine-tuning (or
+closing the visual gap some other way) is the path, not a size upgrade.
+
 ## Where this leaves the project
 
 Cosmos3-Edge is not, right now, a trustworthy frozen "virtual environment" for this
 dataset's specific rendering style. Calibrating the action scale further won't fix
-a visual domain gap. Options, roughly in order of effort:
+a visual domain gap, and (§7) neither does a bigger checkpoint. Remaining options:
 
-1. **Try Cosmos3-Nano** (16B, not distilled) -- may generalize better to stylized
-   renders; tight on this GPU's 46 GiB VRAM (~46 GiB peak measured on the DGX Spark's
-   *shared* pool), so this needs its own headroom check, not an assumption it fits.
-2. **Push the mujoco rendering toward photorealism** (materials/lighting/textures)
-   to shrink the domain gap -- real engineering effort in mujoco-env-dataset, no
-   guarantee of how much it'd help.
-3. **Descope Cosmos's role**: keep MuJoCo as the actual training/eval environment
+1. ~~Try Cosmos3-Nano~~ -- tried (§7). Same weak/incoherent response; ruled out.
+2. **Push the mujoco rendering toward photorealism** -- tried (§6). Real,
+   measurable, but partial improvement; not sufficient alone.
+3. **Fine-tune Cosmos3-Edge** (LoRA, keeping it Edge-sized for the eventual policy-
+   training loop) -- scoped in a separate feasibility report with the key claims
+   verified empirically (gradient flow, LoRA injection, isolated new-domain
+   training); recommendation was "go." A minimal training pilot is the next step
+   to confirm it actually moves these metrics before committing further.
+4. **Descope Cosmos's role**: keep MuJoCo as the actual training/eval environment
    (it already works, is exact, and is free), and treat Cosmos-conditioned rollouts
    as an exploratory/auxiliary signal rather than the environment the policy is
    trained or evaluated against.
