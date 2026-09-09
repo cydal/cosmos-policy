@@ -92,6 +92,40 @@ synthetic MuJoCo renders are visually far enough outside that distribution that
 Cosmos3-Edge (a 4B, distilled checkpoint) can't reliably apply its learned action
 dynamics to them, independent of how well the action numbers are calibrated.
 
+## 6. Tried: closing the gap with camera-sensor post-processing
+
+Added `mujoco-env-dataset/synthbot/photoreal.py` (gaussian blur, sensor noise,
+vignette, chromatic aberration, brightness/contrast/saturation jitter -- applied
+post-render, opt-in via `--photoreal`, never touching physics or the recorded
+action/state arrays) plus a skybox and mild specular/shininess tweaks in
+`scene.py`. Re-ran the same grasp-window test against a `--photoreal` episode:
+
+| domain | scale | energy (stay_control ~1.53 on this render) | cube_disp (GT: (-4.95, -4.79)) |
+|---|---|---|---|
+| `bridge_orig_lerobot` | 1 | 1.517 | (0.69, 0.20) |
+| `bridge_orig_lerobot` | 18 | 1.665 | (1.26, **-1.78**) |
+| `bridge_orig_lerobot` | 60 | 2.512 | (1.92, **-2.11**) -- but hallucinates (see below) |
+| `umi` | 40 | 7.277 | (20.4, 9.2) -- scene-zoom, not a real match |
+| `umi` | 60 | 9.168 | (10.9, 9.8) -- same |
+
+The one genuine improvement: on the clean render, `bridge_orig_lerobot`'s predicted
+cube motion was *wrong-direction* (positive/downward) at every scale tried. On the
+photoreal render it's *correct-direction* (negative/upward, matching the real lift)
+from scale 18 upward. But magnitude still undershoots ground truth by ~2-3x even at
+the best point, and past a moderate scale both domains degrade: `bridge_orig_lerobot`
+at scale 60 hallucinates a phantom red/purple object out of nothing
+(`qa/photoreal_bridge_hallucination.png`); `umi` at scale 40-60 turns into an extreme
+whole-scene zoom-out rather than in-frame gripper motion, worse than on the clean
+render.
+
+Net: camera-sensor post-processing is a real, measurable, and cheap improvement
+(better sign-correctness on the right-framing domain) but does not close the gap by
+itself. MuJoCo's rasterizer ceiling (flat shading, no global illumination, hard
+shadow edges) is still there underneath the post-process, and the model still
+breaks down at the action magnitudes needed to get a strong response. Worth keeping
+(`--photoreal` is opt-in, zero cost when off) as a complement to, not a replacement
+for, fine-tuning -- see the separate fine-tuning feasibility scoping.
+
 ## Where this leaves the project
 
 Cosmos3-Edge is not, right now, a trustworthy frozen "virtual environment" for this
