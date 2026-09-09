@@ -1,0 +1,21 @@
+# Cosmos3OmniPipeline / CosmosActionCondition landed in diffusers 0.39.0. Hard floor:
+# on 0.38 the import does not exist, and several model-card snippets telling you to
+# install diffusers from git are stale as of 0.39.
+diffusers>=0.39.0
+
+# Cosmos 3's vision tower is Qwen3VLVisionModel; Qwen3-VL support starts at 5.11.
+transformers>=5.11
+accelerate>=1.10
+safetensors
+sentencepiece
+protobuf
+pillow
+numpy
+
+huggingface_hub
+# hf_transfer is intentionally NOT installed/enabled here (see fetch.sh): it ignores
+# socket timeouts, so a stalled route to the CDN hangs forever instead of erroring.
+
+# PyAV encodes/decodes the mp4s and is what diffusers.utils.encode_video needs.
+av
+imageio
