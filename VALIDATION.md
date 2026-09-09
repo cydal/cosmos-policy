@@ -172,10 +172,13 @@ a visual domain gap, and (§7) neither does a bigger checkpoint. Remaining optio
 2. **Push the mujoco rendering toward photorealism** -- tried (§6). Real,
    measurable, but partial improvement; not sufficient alone.
 3. **Fine-tune Cosmos3-Edge** (LoRA, keeping it Edge-sized for the eventual policy-
-   training loop) -- scoped in a separate feasibility report with the key claims
-   verified empirically (gradient flow, LoRA injection, isolated new-domain
-   training); recommendation was "go." A minimal training pilot is the next step
-   to confirm it actually moves these metrics before committing further.
+   training loop) -- scoped in `FINETUNING_SCOPE.md` with the key claims verified
+   empirically; recommendation was "go." A minimal 800-step pilot
+   (`LORA_PILOT_RESULTS.md`) shows a real, encouraging signal (direction-
+   correctness on held-out episodes roughly doubled, and the untrained-domain
+   baseline's outright hallucinations disappeared) but not yet a clean win
+   (action-magnitude sensitivity hasn't moved). Recommended: scale up before
+   concluding either way.
 4. **Descope Cosmos's role**: keep MuJoCo as the actual training/eval environment
    (it already works, is exact, and is free), and treat Cosmos-conditioned rollouts
    as an exploratory/auxiliary signal rather than the environment the policy is
