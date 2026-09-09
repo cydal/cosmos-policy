@@ -39,8 +39,26 @@ the per-checkpoint numbers.
 ## Usage
 
 ```bash
-./setup.sh                                            # venv + torch + diffusers, once
-./fetch.sh                                            # pull Cosmos3-Edge, once
-/opt/dlami/nvme/cosmos-policy/.venv/bin/python smoke_test.py --image   # fastest check
-/opt/dlami/nvme/cosmos-policy/.venv/bin/python smoke_test.py --action  # action-conditioned
+./setup.sh                       # venv + torch + diffusers, once
+./fetch.sh                       # pull Cosmos3-Edge, once
+source env.sh                    # LD_LIBRARY_PATH for pip-installed nvidia/cudnn libs
+python smoke_test.py --image     # fastest check, ~10s
+python smoke_test.py --action    # action-conditioned rollout
 ```
+
+`source env.sh` is not optional: without it the pipeline loads fine but the VAE's
+conv3d fails on first use (`CUDNN_STATUS_SUBLIBRARY_LOADING_FAILED`) because cudnn's
+runtime-compiled JIT engine dlopens its sibling `.so` by soname, and the
+pip-installed `nvidia-cudnn-cu13` package's lib directory isn't on any default
+linker search path.
+
+## Cosmos3-Edge's shipped action example is UMI, not AgiBotWorld
+
+Every checkpoint ships a ready-to-run `CosmosActionCondition` example under
+`assets/`. Nano's is an AgiBotWorld humanoid (29-D actions); **Edge's is UMI**
+(Universal Manipulation Interface) -- `domain_name="umi"`, 10-D actions
+(`[dx, dy, dz]` + 6-D continuous rotation representation + gripper), 16-step chunks,
+256px, ego view. That's a much closer match to mujoco-env-dataset's 7-D
+`[dx, dy, dz, droll, dpitch, dyaw, gripper]` (position delta + orientation + gripper,
+just Euler angles instead of the 6-D rotation representation) than a humanoid domain
+would be -- worth keeping in mind for step 2.

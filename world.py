@@ -25,8 +25,14 @@ import time
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
-ACTION_FRAME = "assets/example_action_fd_agibotworld_first_frame.png"
-ACTION_CHUNKS = "assets/example_action_fd_agibotworld_action_chunks.json"
+# Cosmos3-Edge ships a UMI (Universal Manipulation Interface) example, not the
+# AgiBotWorld-humanoid one Nano ships. UMI's 10-D action -- [dx, dy, dz, 6D rotation,
+# gripper] -- is a much closer match to mujoco-env-dataset's 7-D
+# [dx, dy, dz, droll, dpitch, dyaw, gripper] than a humanoid domain would be: same
+# gripper end-effector framing, position delta + orientation + gripper, just a
+# different rotation parameterization (6D continuous repr. vs. Euler angles).
+ACTION_FRAME = "assets/example_action_fd_umi_first_frame.png"
+ACTION_CHUNKS = "assets/example_action_fd_umi_action_chunks.json"
 
 # Rough BF16-resident + VAE-decode-spike budgets per checkpoint. EDGE is the only one
 # with real headroom on a 46 GiB card; NANO is here so guard_memory fails fast with an

@@ -29,6 +29,7 @@ echo "==> cosmos stack"
 "$PY" -m pip install -q -r "$HERE/requirements.txt"
 
 echo "==> verify"
+source "$HERE/env.sh"
 "$PY" - <<'PY'
 import torch
 print(f"  torch {torch.__version__}  cuda={torch.version.cuda}  available={torch.cuda.is_available()}")
@@ -50,6 +51,6 @@ cat <<EOF
 
 Done. Next:
 
-  ./fetch.sh                       # pull nvidia/Cosmos3-Edge (~few GB) once
-  $VENV_DIR/bin/python smoke_test.py   # one short clip on the host
+  ./fetch.sh                        # pull nvidia/Cosmos3-Edge (~few GB) once
+  source env.sh && python smoke_test.py   # one short clip on the host
 EOF
