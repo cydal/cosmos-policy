@@ -36,12 +36,14 @@ class PolicyFrameDataset(Dataset):
         split: str,
         transform=None,
         augment: bool = False,
+        augment_prob: float = 0.5,
         augment_seed: int = 0,
     ):
         self.root = pathlib.Path(root)
         self.split = split
         self.transform = transform
         self.augment = augment
+        self.augment_prob = augment_prob
         self._rng = np.random.default_rng(augment_seed)
 
         split_dir = self.root / split
@@ -70,7 +72,7 @@ class PolicyFrameDataset(Dataset):
         from PIL import Image
 
         frame = Image.open(ep_dir / "frames" / f"{i:03d}.png").convert("RGB")
-        if self.augment:
+        if self.augment and self._rng.random() < self.augment_prob:
             arr = photoreal.apply(np.asarray(frame), self._rng)
             frame = Image.fromarray(arr)
         if self.transform is not None:
