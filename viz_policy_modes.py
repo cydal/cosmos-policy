@@ -141,6 +141,8 @@ def main() -> None:
     ap.add_argument("--steps", type=int, default=30)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=pathlib.Path, default=pathlib.Path("qa_final/policy_modes"))
+    ap.add_argument("--policy-checkpoint", type=pathlib.Path, default=POLICY_CHECKPOINT)
+    ap.add_argument("--dataset-root", type=pathlib.Path, default=DATASET_ROOT)
     args = ap.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -148,14 +150,14 @@ def main() -> None:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     policy = PolicyNet(pretrained=False).to(device)
-    policy.load_state_dict(torch.load(POLICY_CHECKPOINT, map_location=device))
+    policy.load_state_dict(torch.load(args.policy_checkpoint, map_location=device))
     policy.eval()
     transform = imagenet_transform()
 
-    ep_dir = DATASET_ROOT / args.split / args.episode
+    ep_dir = args.dataset_root / args.split / args.episode
     cfg = load_config(ep_dir / "meta.json")
     prompt = prompt_for(json.loads((ep_dir / "meta.json").read_text()))
-    fps = json.loads((DATASET_ROOT / "dataset_meta.json").read_text())["action_space"]["control_hz"]
+    fps = json.loads((args.dataset_root / "dataset_meta.json").read_text())["action_space"]["control_hz"]
 
     print(f"--- running real closed-loop policy rollout: {args.episode} ({args.split}) ---")
     real_frames, real_actions7, n_chunks = real_closed_loop(policy, transform, device, cfg, args.chunks)
