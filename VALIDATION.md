@@ -162,6 +162,41 @@ footage, across the board), not of how big any single checkpoint is. It also mea
 there's no shortcut available by "just use the bigger model": fine-tuning (or
 closing the visual gap some other way) is the path, not a size upgrade.
 
+## 8. Closed-loop policy<->Cosmos demo: where fidelity actually breaks down
+
+With the scaled-up policy in hand (`LORA_SCALEUP_RESULTS.md`'s sibling,
+`POLICY_TRAINING.md`), ran the literal closed loop the original brief asked for:
+policy -> action -> Cosmos -> predicted observation -> policy -> action ->
+Cosmos -> ..., for 8 chunks / 128 steps, alongside the real mujoco rollout and
+the anchored (mode 1) version, all from the same fresh opening frame
+(`qa/policy_scaleup/closed_loop_demo/`, `viz_policy_modes.py`).
+
+**Result**: mode 1 (anchored -- Cosmos re-grounds to a real frame every chunk)
+tracks the real rollout closely for the full 128 steps, one small transient
+glitch aside. Mode 2 (pure autoregressive -- no real frames after frame 0)
+degrades progressively: tracks reasonably for ~3 chunks, then both geometric
+distortion (already seen at a shorter 4-chunk horizon) and a new symptom that
+only the longer horizon revealed -- **exposure/color drift**, the whole scene's
+lighting washing out into a flatter, paler palette by chunk 4+.
+
+**Diagnosis**: since the same policy and the same action sequence drive both
+modes, and the only variable that changes is whether Cosmos conditions on a real
+frame or its own last generated frame, the divergence is attributable to Cosmos's
+autoregressive stability, not the policy. This is corroborated by the closed-loop
+success-rate numbers, which were already measured independently of Cosmos
+entirely (`POLICY_TRAINING.md`'s eval): 86-90% real-simulator success across
+splits. The policy is not the bottleneck here.
+
+**Why "more of the same training data" likely isn't sufficient on its own**:
+`train_lora_pilot.py`'s training data has only ever shown Cosmos clean, real
+conditioning frames (`encode_gt_latents` always reads real `sample.gt_frames()`).
+Mode 2 puts Cosmos in a situation it was never trained for: conditioning on a
+frame that already carries its own generation artifacts. That's a train/inference
+distribution mismatch (exposure bias), not a data-volume problem -- closing it
+needs training examples that specifically include imperfect/self-referential
+conditioning frames, not just more clean ones. See `COSMOS_FINETUNE_V2.md` for
+the resulting plan.
+
 ## Where this leaves the project
 
 Cosmos3-Edge is not, right now, a trustworthy frozen "virtual environment" for this
