@@ -174,7 +174,7 @@ def main() -> None:
     media.write_mp4(mode1, args.out / "mode1_parallel_imagination.mp4", fps=int(fps))
 
     print("--- mode 2: pure autoregressive imagination ---")
-    gripper0 = float(np.load(ep_dir / "steps.npz")["gripper_cmd"][0])
+    gripper0 = float(cfg.gripper_start)
     mode2 = mode2_pure_imagination(
         pipe, policy, transform, device, real_frames[0], gripper0, prompt, fps, n_chunks, args.steps, args.seed
     )
