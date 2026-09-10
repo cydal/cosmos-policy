@@ -197,6 +197,25 @@ needs training examples that specifically include imperfect/self-referential
 conditioning frames, not just more clean ones. See `COSMOS_FINETUNE_V2.md` for
 the resulting plan.
 
+**Follow-up ablation, because the diagnosis above had a real gap**: mode 1 and
+mode 2 don't actually hold the *actions* constant, only the policy and starting
+frame -- the policy reacts to whatever it currently sees, so once Cosmos drifts
+even slightly, the policy may choose different actions than it would have from a
+real frame. That confounds "Cosmos's own instability" with "the policy reacting
+badly to a frame it never trained on." Isolated it with a third condition:
+Cosmos self-conditioning autoregressively (no real re-anchoring, same as mode 2)
+but driven by the real, ground-truth-correct action sequence throughout -- no
+policy in the loop at all (`viz_policy_modes.py`'s
+`cosmos_autoregressive_real_actions`, `mode_cosmos_real_actions.mp4`).
+
+**Result**: this condition drifts about as badly as the policy-in-the-loop
+version, starting around the same chunk (~4), with the same character (washed-
+out lighting, distorted geometry). Perfect actions don't save it. That confirms
+the diagnosis rather than just asserting it: the instability is Cosmos's own
+self-conditioning, not the policy's reaction to imperfect frames. The
+exposure-bias fine-tune plan (`COSMOS_FINETUNE_V2.md`) is targeting the right
+thing.
+
 ## Where this leaves the project
 
 Cosmos3-Edge is not, right now, a trustworthy frozen "virtual environment" for this

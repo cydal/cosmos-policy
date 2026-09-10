@@ -102,6 +102,26 @@ def mode1_parallel_imagination(pipe, real_frames, real_actions7, prompt, fps, n_
     return imagined
 
 
+def cosmos_autoregressive_real_actions(pipe, first_frame_arr, real_actions7, prompt, fps, n_chunks, steps, seed):
+    """Isolates Cosmos's own autoregressive stability from the policy: self-conditions
+    on Cosmos's own last frame each chunk (no real re-anchoring, same as pure
+    imagination), but drives it with the REAL, correct action sequence throughout --
+    no policy in this loop at all. If this drifts about as much as
+    `mode2_pure_imagination`, the problem is Cosmos's self-conditioning, not the
+    policy's reaction to imperfect frames. If it stays much more stable, a real share
+    of `mode2_pure_imagination`'s degradation is the policy reacting to frames it was
+    never trained to see, not Cosmos alone."""
+    current_frame = first_frame_arr
+    imagined = [current_frame]
+    for c in range(n_chunks):
+        chunk7 = real_actions7[c * CHUNK_SIZE : (c + 1) * CHUNK_SIZE]
+        meta = build_meta(to_cosmos10(chunk7), Image.fromarray(current_frame), prompt, fps)
+        frames, _ = world.rollout(pipe, meta, num_chunks=1, steps=steps, seed=seed)
+        imagined.extend(frames[1:])
+        current_frame = np.asarray(frames[-1])
+    return imagined
+
+
 def mode2_pure_imagination(pipe, model, transform, device, first_frame_arr, gripper0, prompt, fps, n_chunks, steps, seed):
     """Fully autoregressive: the policy only ever sees Cosmos's own last frame after
     chunk 0. One primitive per chunk boundary, held for the whole chunk (see module
@@ -173,15 +193,20 @@ def main() -> None:
     mode1 = mode1_parallel_imagination(pipe, real_frames, real_actions7, prompt, fps, n_chunks, args.steps, args.seed)
     media.write_mp4(mode1, args.out / "mode1_parallel_imagination.mp4", fps=int(fps))
 
-    print("--- mode 2: pure autoregressive imagination ---")
+    print("--- isolating Cosmos's own drift: autoregressive, but driven by the REAL action sequence (no policy in this loop) ---")
+    real_action_mode = cosmos_autoregressive_real_actions(pipe, real_frames[0], real_actions7, prompt, fps, n_chunks, args.steps, args.seed)
+    media.write_mp4([Image.fromarray(f) if isinstance(f, np.ndarray) else f for f in real_action_mode], args.out / "mode_cosmos_real_actions.mp4", fps=int(fps))
+
+    print("--- mode 2: pure autoregressive imagination (policy reacting to Cosmos's own frames) ---")
     gripper0 = float(cfg.gripper_start)
     mode2 = mode2_pure_imagination(
         pipe, policy, transform, device, real_frames[0], gripper0, prompt, fps, n_chunks, args.steps, args.seed
     )
     media.write_mp4([Image.fromarray(f) if isinstance(f, np.ndarray) else f for f in mode2], args.out / "mode2_pure_imagination.mp4", fps=int(fps))
 
-    strip_rows([real_frames, mode1, mode2]).save(args.out / "comparison_strip.png")
-    print(f"\nwrote mode0_real.mp4, mode1_parallel_imagination.mp4, mode2_pure_imagination.mp4, comparison_strip.png -> {args.out}/")
+    strip_rows([real_frames, mode1, real_action_mode, mode2]).save(args.out / "comparison_strip.png")
+    print(f"\nwrote mode0_real.mp4, mode1_parallel_imagination.mp4, mode_cosmos_real_actions.mp4, mode2_pure_imagination.mp4, comparison_strip.png -> {args.out}/")
+    print("comparison_strip.png rows: real / anchored-each-chunk / Cosmos-autoregressive+real-actions / Cosmos-autoregressive+policy-in-loop")
     print("comparison_strip.png rows: real policy rollout / mode-1 (anchored) / mode-2 (pure, drifting)")
 
 
