@@ -64,6 +64,8 @@ def main() -> None:
     ap.add_argument("--augment", action="store_true", default=True)
     ap.add_argument("--no-augment", dest="augment", action="store_false")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--weight-decay", type=float, default=1e-4)
+    ap.add_argument("--max-hours", type=float, default=None, help="wall-clock safety cap; --epochs becomes a ceiling, not a target")
     ap.add_argument("--limit-train-batches", type=int, default=None, help="prototyping/smoke-test cap")
     args = ap.parse_args()
 
@@ -87,12 +89,16 @@ def main() -> None:
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
     model = PolicyNet().to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     ce = nn.CrossEntropyLoss(weight=weights)
 
     history = {"train_loss": [], "val_loss": [], "val_accuracy": []}
+    best_val_accuracy = -1.0
     t0 = time.monotonic()
     for epoch in range(1, args.epochs + 1):
+        if args.max_hours is not None and (time.monotonic() - t0) / 3600.0 >= args.max_hours:
+            log.info("hit --max-hours=%.2f after epoch %d; stopping", args.max_hours, epoch - 1)
+            break
         model.train()
         running = 0.0
         n_batches = 0
@@ -121,8 +127,16 @@ def main() -> None:
         torch.save(model.state_dict(), args.out / "latest.pt")
         (args.out / "history.json").write_text(json.dumps(history, indent=2))
         (args.out / "val_confusion_latest.json").write_text(json.dumps(val_metrics["confusion"]))
+        if val_metrics["accuracy"] > best_val_accuracy:
+            best_val_accuracy = val_metrics["accuracy"]
+            torch.save(model.state_dict(), args.out / "best.pt")
+            (args.out / "val_confusion_best.json").write_text(json.dumps(val_metrics["confusion"]))
+            log.info("new best val_accuracy=%.4f -> best.pt", best_val_accuracy)
 
-    log.info("done: %d epochs, %.1f min total, checkpoint at %s", args.epochs, (time.monotonic() - t0) / 60, args.out / "latest.pt")
+    log.info(
+        "done: %d epochs run, %.1f min total, best val_accuracy=%.4f, checkpoints at %s",
+        len(history["train_loss"]), (time.monotonic() - t0) / 60, best_val_accuracy, args.out,
+    )
 
 
 if __name__ == "__main__":
