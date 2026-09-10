@@ -323,6 +323,13 @@ def main() -> None:
     ap.add_argument("--ckpt-every", type=int, default=250)
     ap.add_argument("--grad-checkpointing", action="store_true")
     ap.add_argument("--out", type=pathlib.Path, default=CKPT_ROOT)
+    ap.add_argument("--dataset-root", type=pathlib.Path, default=DATASET_ROOT)
+    ap.add_argument(
+        "--max-hours", type=float, default=None,
+        help="stop (after checkpointing) once this much wall-clock time has elapsed, "
+        "even if --steps hasn't been reached -- the actual control knob for an "
+        "unattended overnight run, where --steps should be set generously high",
+    )
     args = ap.parse_args()
 
     random.seed(args.seed)
@@ -345,7 +352,7 @@ def main() -> None:
 
     optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=0.0)
 
-    train_ds = MujocoWindowDataset(DATASET_ROOT, "train", stride=args.stride)
+    train_ds = MujocoWindowDataset(args.dataset_root, "train", stride=args.stride)
     log.info("train windows: %d", len(train_ds))
 
     # Discretized train-time noise schedule, matched to inference's own sigma/timestep
@@ -364,7 +371,12 @@ def main() -> None:
     cursor = 0
 
     optimizer.zero_grad()
+    stopped_early = False
     for step in range(1, args.steps + 1):
+        if args.max_hours is not None and (time.monotonic() - t0) / 3600.0 >= args.max_hours:
+            log.info("hit --max-hours=%.2f at step %d; checkpointing and stopping", args.max_hours, step - 1)
+            stopped_early = True
+            break
         for micro in range(args.grad_accum):
             if cursor >= len(order):
                 random.shuffle(order)
@@ -396,9 +408,16 @@ def main() -> None:
             )
         if step % args.ckpt_every == 0 or step == args.steps:
             save_checkpoint(pipe, args.out, step)
+            (args.out / "loss_history.json").write_text(json.dumps(history))
 
+    if stopped_early:
+        save_checkpoint(pipe, args.out, step - 1)
     (args.out / "loss_history.json").write_text(json.dumps(history))
-    log.info("done: %d steps, %.1f min total, final ckpt at %s", args.steps, (time.monotonic() - t0) / 60, args.out)
+    log.info(
+        "done: %d/%d steps, %.1f min total%s, final ckpt at %s",
+        (step - 1) if stopped_early else args.steps, args.steps,
+        (time.monotonic() - t0) / 60, " (stopped early on --max-hours)" if stopped_early else "", args.out,
+    )
 
 
 if __name__ == "__main__":

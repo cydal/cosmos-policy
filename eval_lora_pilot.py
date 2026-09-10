@@ -42,7 +42,7 @@ DATASET_ROOT = pathlib.Path("/opt/dlami/nvme/cosmos-policy/lora_pilot/dataset")
 OUT_ROOT = pathlib.Path("out/lora_pilot_eval")
 CHUNK_SIZE = 16
 RESOLUTION_TIER = 256
-N_VAL_EPISODES = 5
+N_VAL_EPISODES = 25
 
 
 def load_checkpoint(pipe, checkpoint: pathlib.Path) -> None:
@@ -76,10 +76,10 @@ def build_meta(action10: np.ndarray, first_frame, prompt: str, fps: float) -> di
     }
 
 
-def build_val_cases(n_episodes: int) -> list[dict]:
+def build_val_cases(dataset_root: pathlib.Path, n_episodes: int, split: str = "val") -> list[dict]:
     from synthbot.cosmos_action import to_cosmos10
 
-    episodes = load_episodes(DATASET_ROOT, "val")[:n_episodes]
+    episodes = load_episodes(dataset_root, split)[:n_episodes]
     cases = []
     for ep in episodes:
         grasp_start = ep.grasp_start(CHUNK_SIZE)
@@ -154,6 +154,8 @@ def main() -> None:
     ap.add_argument("--tag", required=True, help="label for this eval run, e.g. baseline / trained")
     ap.add_argument("--checkpoint", type=pathlib.Path, default=None)
     ap.add_argument("--n-episodes", type=int, default=N_VAL_EPISODES)
+    ap.add_argument("--split", default="val")
+    ap.add_argument("--dataset-root", type=pathlib.Path, default=DATASET_ROOT)
     ap.add_argument("--steps", type=int, default=30)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
@@ -167,7 +169,7 @@ def main() -> None:
     if args.checkpoint is not None:
         load_checkpoint(pipe, args.checkpoint)
 
-    cases = build_val_cases(args.n_episodes)
+    cases = build_val_cases(args.dataset_root, args.n_episodes, args.split)
     results = {}
     for case in cases:
         print(f"=== {case['name']} ===")
