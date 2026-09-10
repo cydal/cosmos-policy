@@ -116,14 +116,23 @@ def attach_trainable_params(transformer) -> list[torch.nn.Parameter]:
     return trainable
 
 
-def encode_gt_latents(pipe, sample: WindowSample, device, dtype):
+def encode_gt_latents(pipe, sample: WindowSample, device, dtype, override_first_frame=None):
     """Real ground-truth vision latents for ALL 17 frames of the window (not just frame
     0) -- the piece `prepare_latents` doesn't expose (it only returns a noise-mixed
     `latents` tensor meant for inference's first denoising step). Reuses the pipeline's
     own conditioning-frame preprocessing + VAE encode, just called directly instead of
     through `prepare_latents`, since training needs real targets at every noisy position
-    to build `x_t` at an arbitrary sampled timestep."""
+    to build `x_t` at an arbitrary sampled timestep.
+
+    `override_first_frame`: if given (a PIL image), replaces frame 0 -- the anchor the
+    model conditions on -- while frames 1-16 stay the REAL targets. This is the exposure-
+    bias fix in `COSMOS_FINETUNE_V2.md`: train some fraction of examples to reach the
+    correct real continuation starting from an imperfect (perturbed or self-generated)
+    frame 0, rather than always the pristine real one, since mode 2's autoregressive use
+    conditions on exactly the kind of imperfect frame training never otherwise sees."""
     gt_frames = sample.gt_frames()
+    if override_first_frame is not None:
+        gt_frames = [override_first_frame] + list(gt_frames[1:])
     vision_tensor, action_image_size, _, _ = pipe._prepare_action_video_conditioning(
         gt_frames, RESOLUTION_TIER, sample.chunk_size + 1, device=device, dtype=dtype
     )
@@ -132,12 +141,17 @@ def encode_gt_latents(pipe, sample: WindowSample, device, dtype):
     return x0_vision  # [1, C, T_latent, H, W], float32
 
 
-def pack_sample(pipe, sample: WindowSample, device, dtype, fps: float):
+def pack_sample(pipe, sample: WindowSample, device, dtype, fps: float, override_first_frame=None):
     """Build every static (non-timestep) field a forward-dynamics training step needs,
     reusing the pipeline's text/vision/action segment builders exactly as `__call__`
-    does. Returns a dict consumed by `training_step`."""
+    does. Returns a dict consumed by `training_step`.
+
+    `override_first_frame`: see `encode_gt_latents`. Threaded into the
+    `CosmosActionCondition.image` too, so the action-segment bookkeeping stays
+    consistent with what the vision encoder actually saw."""
     from diffusers import CosmosActionCondition
 
+    first_frame = override_first_frame if override_first_frame is not None else sample.first_frame()
     action10 = torch.from_numpy(sample.action10())
     action_cond = CosmosActionCondition(
         mode="forward_dynamics",
@@ -145,7 +159,7 @@ def pack_sample(pipe, sample: WindowSample, device, dtype, fps: float):
         domain_name=MUJOCO_DOMAIN_NAME,
         resolution_tier=RESOLUTION_TIER,
         raw_actions=action10,
-        image=sample.first_frame(),
+        image=first_frame,
         view_point=VIEW_POINT,
     )
 
@@ -161,7 +175,7 @@ def pack_sample(pipe, sample: WindowSample, device, dtype, fps: float):
     )
     text_segment = pipe._prepare_text_segment(cond_input_ids, device=device)
 
-    x0_vision = encode_gt_latents(pipe, sample, device, dtype)
+    x0_vision = encode_gt_latents(pipe, sample, device, dtype, override_first_frame=override_first_frame)
     latent_t = x0_vision.shape[2]
     vision_condition_mask = torch.zeros((latent_t, 1, 1), device=device, dtype=dtype)
     vision_condition_mask[0, 0, 0] = 1.0  # frame 0 is the real anchor -- never noised
