@@ -4,6 +4,11 @@ Freeze NVIDIA Cosmos 3 as a virtual environment (action-conditioned world model)
 train a ResNet18-backed CNN policy against it, bootstrapped from the synthetic
 pick-and-place data in [`../mujoco-env-dataset`](../mujoco-env-dataset).
 
+**[`JOURNEY.md`](JOURNEY.md) is the narrative version of everything below** --
+what we tried, what broke, what we learned, in presentation order rather than
+file-creation order. Start there if you want the story; keep reading here for
+the technical reference.
+
 ## Plan
 
 1. **Environment + Cosmos 3** (done) -- get Cosmos 3 running on this box and prove
