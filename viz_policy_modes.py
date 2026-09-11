@@ -162,6 +162,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=pathlib.Path, default=pathlib.Path("qa_final/policy_modes"))
     ap.add_argument("--policy-checkpoint", type=pathlib.Path, default=POLICY_CHECKPOINT)
+    ap.add_argument("--cosmos-checkpoint", type=pathlib.Path, default=COSMOS_CHECKPOINT)
     ap.add_argument("--dataset-root", type=pathlib.Path, default=DATASET_ROOT)
     args = ap.parse_args()
 
@@ -187,7 +188,7 @@ def main() -> None:
 
     print("--- loading fine-tuned Cosmos ---")
     pipe = world.load(config.EDGE)
-    load_checkpoint(pipe, COSMOS_CHECKPOINT)
+    load_checkpoint(pipe, args.cosmos_checkpoint)
 
     print("--- mode 1: parallel imagination (anchored each chunk) ---")
     mode1 = mode1_parallel_imagination(pipe, real_frames, real_actions7, prompt, fps, n_chunks, args.steps, args.seed)
